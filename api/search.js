@@ -14,8 +14,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Prioritize Foundation + SR Legacy for cleaner data, fall back to all types
-    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(q)}&pageSize=15&pageNumber=${page}&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS)&api_key=${apiKey}`;
+    // Use SR Legacy + Survey (FNDDS) for reliable macros. Skip Foundation (often missing basic macros).
+    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(q)}&pageSize=15&pageNumber=${page}&dataType=SR%20Legacy,Survey%20(FNDDS),Branded&api_key=${apiKey}`;
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -26,24 +26,34 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    const results = (data.foods || []).map(food => {
-      const nutrients = {};
-      (food.foodNutrients || []).forEach(n => {
-        nutrients[n.nutrientId] = n.value || 0;
-      });
+    const results = (data.foods || [])
+      .map(food => {
+        const nutrients = {};
+        (food.foodNutrients || []).forEach(n => {
+          nutrients[n.nutrientId] = n.value || 0;
+        });
 
-      return {
-        fdcId: food.fdcId,
-        description: food.description || 'Unknown',
-        brand: food.brandName || food.brandOwner || '',
-        calories: nutrients[1008] || 0,
-        protein: nutrients[1003] || 0,
-        carbs: nutrients[1005] || 0,
-        fat: nutrients[1004] || 0,
-        servingSize: 100,
-        servingUnit: 'g'
-      };
-    });
+        return {
+          fdcId: food.fdcId,
+          description: food.description || 'Unknown',
+          brand: food.brandName || food.brandOwner || '',
+          dataType: food.dataType || '',
+          calories: nutrients[1008] || 0,
+          protein: nutrients[1003] || 0,
+          carbs: nutrients[1005] || 0,
+          fat: nutrients[1004] || 0,
+          servingSize: 100,
+          servingUnit: 'g'
+        };
+      })
+      // Filter out items with no calorie data (broken entries)
+      .filter(r => r.calories > 0)
+      // Prefer SR Legacy and Survey over Branded for cleaner generic foods
+      .sort((a, b) => {
+        const priority = { 'SR Legacy': 0, 'Survey (FNDDS)': 1, 'Branded': 2 };
+        return (priority[a.dataType] ?? 3) - (priority[b.dataType] ?? 3);
+      })
+      .slice(0, 10);
 
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
     res.status(200).json({ results });
