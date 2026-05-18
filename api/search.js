@@ -14,8 +14,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Use SR Legacy + Survey (FNDDS) for reliable macros. Skip Foundation (often missing basic macros).
-    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(q)}&pageSize=15&pageNumber=${page}&dataType=SR%20Legacy,Survey%20(FNDDS),Branded&api_key=${apiKey}`;
+    // Search all data types, then filter/sort in our code for best results
+    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(q)}&pageSize=25&pageNumber=${page}&api_key=${apiKey}`;
     const response = await fetch(url);
 
     if (!response.ok) {
