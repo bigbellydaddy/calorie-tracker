@@ -14,7 +14,8 @@ export default async function handler(req, res) {
   }
 
   try {
-    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(q)}&pageSize=10&pageNumber=${page}&api_key=${apiKey}`;
+    // Prioritize Foundation + SR Legacy for cleaner data, fall back to all types
+    const url = `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(q)}&pageSize=15&pageNumber=${page}&dataType=Foundation,SR%20Legacy,Survey%20(FNDDS)&api_key=${apiKey}`;
     const response = await fetch(url);
 
     if (!response.ok) {

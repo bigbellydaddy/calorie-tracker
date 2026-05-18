@@ -51,8 +51,8 @@ export default async function handler(req, res) {
     `;
 
     await sql`CREATE INDEX IF NOT EXISTS idx_food_log_date ON food_log(user_id, date)`;
-    await sql`CREATE INDEX IF NOT EXISTS idx_food_log_meal ON food_log(user_id, date, meal_type)`;
     await sql`CREATE INDEX IF NOT EXISTS idx_weight_log_date ON weight_log(user_id, date)`;
+    // Dropped idx_food_log_meal — redundant with idx_food_log_date, saves storage
 
     res.status(200).json({ success: true, message: 'All tables and indexes created' });
   } catch (error) {

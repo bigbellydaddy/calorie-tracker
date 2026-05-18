@@ -37,34 +37,12 @@ export default async function handler(req, res) {
         d.setDate(d.getDate() + 1);
       }
 
-      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+      res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
       return res.status(200).json({ days });
     }
 
     if (date) {
-      const totalsRow = await sql`
-        SELECT
-          COALESCE(SUM(calories), 0) as calories,
-          COALESCE(SUM(protein), 0) as protein,
-          COALESCE(SUM(carbs), 0) as carbs,
-          COALESCE(SUM(fat), 0) as fat,
-          COUNT(*) as items
-        FROM food_log
-        WHERE user_id = 1 AND date = ${date}
-      `;
-
-      const mealRows = await sql`
-        SELECT
-          meal_type,
-          SUM(calories) as calories,
-          SUM(protein) as protein,
-          SUM(carbs) as carbs,
-          SUM(fat) as fat
-        FROM food_log
-        WHERE user_id = 1 AND date = ${date}
-        GROUP BY meal_type
-      `;
-
+      // Single query instead of 3 — saves 2 DB round trips per dashboard load
       const itemRows = await sql`
         SELECT id, food_name, meal_type, calories, protein, carbs, fat, serving_size, serving_unit
         FROM food_log
@@ -72,15 +50,28 @@ export default async function handler(req, res) {
         ORDER BY created_at ASC
       `;
 
-      const meals = mealRows.map(m => ({
-        ...m,
-        items: itemRows.filter(i => i.meal_type === m.meal_type)
-      }));
+      // Compute totals and meal breakdowns in JS (free) instead of DB (costs compute)
+      const totals = { calories: 0, protein: 0, carbs: 0, fat: 0, items: itemRows.length };
+      const mealMap = {};
+      for (const item of itemRows) {
+        totals.calories += Number(item.calories);
+        totals.protein += Number(item.protein);
+        totals.carbs += Number(item.carbs);
+        totals.fat += Number(item.fat);
+        if (!mealMap[item.meal_type]) {
+          mealMap[item.meal_type] = { meal_type: item.meal_type, calories: 0, protein: 0, carbs: 0, fat: 0, items: [] };
+        }
+        mealMap[item.meal_type].calories += Number(item.calories);
+        mealMap[item.meal_type].protein += Number(item.protein);
+        mealMap[item.meal_type].carbs += Number(item.carbs);
+        mealMap[item.meal_type].fat += Number(item.fat);
+        mealMap[item.meal_type].items.push(item);
+      }
 
-      res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+      res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=600');
       return res.status(200).json({
-        totals: totalsRow[0],
-        meals
+        totals,
+        meals: Object.values(mealMap)
       });
     }
 
